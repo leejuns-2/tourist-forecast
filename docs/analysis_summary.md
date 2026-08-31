@@ -1,51 +1,40 @@
 # Analysis Summary
 
-## Objective
+## Evaluation Protocol
 
-Predict daily visitors for Seoul tourism points of interest using 2020-2024 data.
+- Train: 2020–2022
+- Validation: 2023
+- Test: 2024
+- Selection metric: 2023 validation MSE on the original visitor scale
+- Final fit: selected configuration retrained on 2020–2023
+- Final evaluation: 2024 holdout after selection
 
-## Evaluation Design
+Preprocessing is contained in sklearn pipelines. Imputation, scaling, and one-hot category discovery are fitted on the current training period and reused without refitting on validation or test data.
 
-- Train period: 2020-2023
-- Test period: 2024
-- Target transformation: `log1p(daily_visitors)` for model fitting, then `expm1` for evaluation on the original visitor scale
-- Metrics: MSE, MAE, R2
+## Model Selection
 
-## Modeling Flow
+Ridge (`alpha=1`) had the lowest 2023 validation MSE (4,079,333.3) among the evaluated regressors and baselines. The strongest Random Forest candidate had validation MSE 8,290,972.1.
 
-1. Load cleaned tourism dataset.
-2. Add date-derived features such as year, month, and day of year.
-3. One-hot encode categorical columns except identifier/name columns.
-4. Remove leakage-prone fields that are likely unavailable at prediction time: `foreign_visitors`, `foreign_share`, and `crowd_level`.
-5. Impute numeric missing values and standardize numeric features.
-6. Train baseline and regression models.
-7. Compare Random Forest parameter candidates.
-8. Analyze residuals and feature importance for the best Random Forest model.
+## Final Holdout
 
-## Main Artifacts
+After retraining Ridge on 2020–2023, the 2024 holdout result was:
 
-After running `python src/train_regression_models.py`, review:
+| MSE | MAE | R² |
+|---:|---:|---:|
+| 12,643,390.6 | 2,309.2 | 0.8167 |
 
-- `outputs/tables/model_comparison_with_rf_sweep.csv`
-- `outputs/tables/rf_parameter_sweep.csv`
-- `outputs/tables/top_feature_importance.csv`
+The past-only POI-month-weekday baseline reached MSE 24,887,899.6 and R² 0.6392 on the same holdout. The selected model therefore improved on a seasonal baseline, not only on a global mean baseline.
+
+## Interpretation
+
+The corrected R² is lower than the repository's earlier 0.9273 claim because the earlier workflow selected a Random Forest using 2024 test error. That result is no longer treated as a final holdout estimate. The current result keeps 2024 out of model and hyperparameter selection.
+
+## Artifacts
+
+- `outputs/tables/model_selection_validation.csv`
+- `outputs/tables/rf_parameter_sweep_validation.csv`
+- `outputs/tables/final_test_metrics.csv`
 - `outputs/tables/top_residual_cases.csv`
-- `outputs/figures/`
+- `outputs/tables/evaluation_protocol.json`
 
-## Current Result
-
-With leakage-prone visitor-derived fields excluded, `Random Forest (default)` performs best in the current run:
-
-| Model | Test MSE | Test MAE | Test R2 |
-|---|---:|---:|---:|
-| Random Forest (default) | 5,015,768.8 | 1,267.1 | 0.9273 |
-| Random Forest (sweep_best) | 5,557,737.4 | 1,292.7 | 0.9194 |
-| Polynomial Regression | 16,781,533.0 | 2,335.7 | 0.7567 |
-| Baseline (Train mean) | 80,177,671.9 | 5,687.6 | -0.1623 |
-
-## Limitations
-
-- The test split is year-based, so results reflect 2024 generalization rather than random holdout performance.
-- Feature importance is model-based and should be interpreted as an exploratory signal, not a causal explanation.
-- Hyperparameter search is a small manual sweep, not an exhaustive optimization.
-- Excluding leakage-prone visitor-derived fields gives a more conservative but more realistic forecasting setup.
+The selected model is linear, so an impurity-based feature-importance artifact is not produced. Coefficients require care because they follow scaling and one-hot encoding and are not causal effects.
