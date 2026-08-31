@@ -1,0 +1,16 @@
+{
+  "train_period": "2020-2022",
+  "validation_period": "2023",
+  "test_period": "2024",
+  "selected_model": "Ridge (alpha=1)",
+  "selection_metric": "validation MSE on original visitor scale",
+  "test_evaluated_after_selection": true,
+  "excluded_leakage_columns": [
+    "foreign_visitors",
+    "foreign_share",
+    "crowd_level"
+  ],
+  "explicit_categorical_features": [
+    "poi_id"
+  ]
+}
