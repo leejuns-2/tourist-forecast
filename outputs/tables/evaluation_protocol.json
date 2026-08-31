@@ -9,5 +9,8 @@
     "foreign_visitors",
     "foreign_share",
     "crowd_level"
+  ],
+  "explicit_categorical_features": [
+    "poi_id"
   ]
 }

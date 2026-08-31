@@ -11,7 +11,7 @@
 - Target: `daily_visitors`
 - Feature groups: calendar, POI attributes, weather, air quality, events, accessibility
 
-`foreign_visitors`, `foreign_share`, `crowd_level`은 목표값이 관측되기 전에 알 수 있다고 보기 어려워 모델에서 제외합니다. 범주형 인코딩과 결측치 처리는 sklearn `Pipeline`과 `ColumnTransformer` 안에서 학습 기간에만 fit됩니다.
+`foreign_visitors`, `foreign_share`, `crowd_level`은 목표값이 관측되기 전에 알 수 있다고 보기 어려워 모델에서 제외합니다. 관광지 식별자인 `poi_id`는 연속형 수치가 아니라 명시적인 categorical feature로 고정해 `OneHotEncoder(handle_unknown="ignore")`로 처리하며, numeric transformer에서는 제외합니다. 범주형 인코딩과 결측치 처리는 sklearn `Pipeline`과 `ColumnTransformer` 안에서 학습 기간에만 fit됩니다.
 
 데이터 제공기관, 원본 URL, 라이선스, 다운로드 날짜, 재배포 가능 여부는 현재 저장소만으로 확인할 수 없습니다. 자세한 TODO는 [`data/README.md`](data/README.md)에 있습니다. 재배포 권한을 확인하기 전에는 포함된 CSV를 공개 배포 가능하다고 가정하면 안 됩니다.
 

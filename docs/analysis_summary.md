@@ -9,7 +9,7 @@
 - Final fit: selected configuration retrained on 2020–2023
 - Final evaluation: 2024 holdout after selection
 
-Preprocessing is contained in sklearn pipelines. Imputation, scaling, and one-hot category discovery are fitted on the current training period and reused without refitting on validation or test data.
+Preprocessing is contained in sklearn pipelines. `poi_id` is explicitly cast to a string and routed to the categorical transformer, where `OneHotEncoder(handle_unknown="ignore")` is applied; it is never included in the numeric transformer. Imputation, scaling, and one-hot category discovery are fitted on the current training period and reused without refitting on validation or test data.
 
 ## Model Selection
 

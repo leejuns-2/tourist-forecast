@@ -33,6 +33,7 @@ VALIDATION_YEAR = 2023
 TEST_YEAR = 2024
 TARGET = "daily_visitors"
 LEAKAGE_COLUMNS = ["foreign_visitors", "foreign_share", "crowd_level"]
+EXPLICIT_CATEGORICAL_FEATURES = ["poi_id"]
 
 FIGURE_DIR.mkdir(parents=True, exist_ok=True)
 TABLE_DIR.mkdir(parents=True, exist_ok=True)
@@ -91,6 +92,7 @@ def load_dataset() -> pd.DataFrame:
 
     df = pd.read_csv(DATA_PATH)
     df["date"] = pd.to_datetime(df["date"], errors="raise")
+    df["poi_id"] = df["poi_id"].astype("string")
     df = df.dropna(subset=[TARGET]).sort_values("date").reset_index(drop=True)
     df["year"] = df["date"].dt.year
     df["month"] = df["date"].dt.month
@@ -103,9 +105,26 @@ def load_dataset() -> pd.DataFrame:
     return df
 
 
+def split_feature_columns(X: pd.DataFrame) -> tuple[list[str], list[str]]:
+    """Route identifiers to categorical preprocessing regardless of source dtype."""
+    explicit_categorical = [
+        column for column in EXPLICIT_CATEGORICAL_FEATURES if column in X.columns
+    ]
+    numeric_columns = [
+        column
+        for column in X.select_dtypes(include=[np.number, "bool"]).columns
+        if column not in explicit_categorical
+    ]
+    categorical_columns = explicit_categorical + [
+        column
+        for column in X.columns
+        if column not in numeric_columns and column not in explicit_categorical
+    ]
+    return numeric_columns, categorical_columns
+
+
 def make_preprocessor(X: pd.DataFrame, scale_numeric: bool) -> ColumnTransformer:
-    numeric_columns = X.select_dtypes(include=[np.number, "bool"]).columns.tolist()
-    categorical_columns = [column for column in X.columns if column not in numeric_columns]
+    numeric_columns, categorical_columns = split_feature_columns(X)
 
     numeric_steps: list[tuple[str, object]] = [("imputer", SimpleImputer(strategy="median"))]
     if scale_numeric:
@@ -461,6 +480,7 @@ def main() -> None:
         "selection_metric": "validation MSE on original visitor scale",
         "test_evaluated_after_selection": True,
         "excluded_leakage_columns": LEAKAGE_COLUMNS,
+        "explicit_categorical_features": EXPLICIT_CATEGORICAL_FEATURES,
     }
     (TABLE_DIR / "evaluation_protocol.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
