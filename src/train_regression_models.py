@@ -34,6 +34,41 @@ TEST_YEAR = 2024
 TARGET = "daily_visitors"
 LEAKAGE_COLUMNS = ["foreign_visitors", "foreign_share", "crowd_level"]
 EXPLICIT_CATEGORICAL_FEATURES = ["poi_id"]
+FEATURE_GROUP_CANDIDATES = {
+    "B1_structural_calendar": [
+        "poi_id",
+        "year",
+        "month",
+        "day",
+        "day_of_year",
+        "day_of_week",
+        "is_weekend",
+        "is_holiday",
+        "special_event",
+        "season_encoded",
+    ],
+    "environment": [
+        "temp",
+        "temp_feel",
+        "humidity",
+        "is_rainy",
+        "precip",
+        "pm25",
+        "uv_index",
+        "TCI",
+    ],
+    "poi_attributes": [
+        "category",
+        "outdoor_ratio",
+        "is_free",
+        "is_heritage",
+        "night_open",
+        "has_parking",
+        "subway_access",
+        "foreign_friendly",
+        "accessibility_score",
+    ],
+}
 
 FIGURE_DIR.mkdir(parents=True, exist_ok=True)
 TABLE_DIR.mkdir(parents=True, exist_ok=True)
@@ -49,8 +84,10 @@ def save_figure(filename: str) -> None:
 
 def regression_metrics(y_true: pd.Series | np.ndarray, prediction: np.ndarray) -> dict[str, float]:
     prediction = np.clip(np.asarray(prediction, dtype=float), 0, None)
+    mse = mean_squared_error(y_true, prediction)
     return {
-        "MSE": mean_squared_error(y_true, prediction),
+        "MSE": mse,
+        "RMSE": float(np.sqrt(mse)),
         "MAE": mean_absolute_error(y_true, prediction),
         "R2": r2_score(y_true, prediction),
     }
@@ -86,11 +123,73 @@ class SeasonalMeanBaseline:
         return np.asarray(predictions)
 
 
+def write_data_audit(df: pd.DataFrame) -> None:
+    """Write a machine-readable audit of the unmodified input table."""
+    parsed_dates = pd.to_datetime(df["date"], errors="raise")
+    feature_frame = df.drop(columns=[TARGET], errors="ignore").copy()
+    feature_frame["poi_id"] = feature_frame["poi_id"].astype("string")
+    numeric_columns, categorical_columns = split_feature_columns(feature_frame)
+
+    unique_counts = feature_frame.nunique(dropna=False)
+    constant_features = unique_counts[unique_counts <= 1].index.tolist()
+    near_constant_features: dict[str, float] = {}
+    for column in feature_frame.columns:
+        counts = feature_frame[column].value_counts(normalize=True, dropna=False)
+        if len(counts) > 1 and float(counts.iloc[0]) >= 0.99:
+            near_constant_features[column] = float(counts.iloc[0])
+
+    target_description = df[TARGET].describe(
+        percentiles=[0.01, 0.25, 0.5, 0.75, 0.95, 0.99]
+    )
+    audit = {
+        "row_count": int(len(df)),
+        "column_count": int(len(df.columns)),
+        "columns": df.columns.tolist(),
+        "dtypes": {column: str(dtype) for column, dtype in df.dtypes.items()},
+        "date_range": {
+            "min": str(parsed_dates.min().date()),
+            "max": str(parsed_dates.max().date()),
+        },
+        "poi_count": int(df["poi_id"].nunique()),
+        "rows_by_year": {
+            str(year): int(count)
+            for year, count in parsed_dates.dt.year.value_counts().sort_index().items()
+        },
+        "rows_by_poi": {
+            str(poi): int(count)
+            for poi, count in df["poi_id"].value_counts().sort_index().items()
+        },
+        "missing_by_column": {
+            column: int(count) for column, count in df.isna().sum().items()
+        },
+        "duplicate_rows": int(df.duplicated().sum()),
+        "duplicate_date_poi_rows": int(df.duplicated(["date", "poi_id"]).sum()),
+        "target_distribution": {
+            key: float(value) for key, value in target_description.items()
+        },
+        "target_skewness": float(df[TARGET].skew()),
+        "target_transform": "log1p for fitting; expm1 and non-negative clipping for evaluation",
+        "constant_features": constant_features,
+        "near_constant_features_dominant_share_at_least_0_99": near_constant_features,
+        "numeric_features": numeric_columns,
+        "categorical_features": categorical_columns,
+        "prediction_time_exclusions": {
+            "foreign_visitors": "target-derived or unavailable before daily_visitors is observed",
+            "foreign_share": "derived from daily and foreign visitor counts",
+            "crowd_level": "treated as a post-observation target proxy",
+        },
+    }
+    (TABLE_DIR / "data_audit.json").write_text(
+        json.dumps(audit, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+
 def load_dataset() -> pd.DataFrame:
     if not DATA_PATH.exists():
         raise FileNotFoundError(f"Dataset not found: {DATA_PATH}")
 
     df = pd.read_csv(DATA_PATH)
+    write_data_audit(df)
     df["date"] = pd.to_datetime(df["date"], errors="raise")
     df["poi_id"] = df["poi_id"].astype("string")
     df = df.dropna(subset=[TARGET]).sort_values("date").reset_index(drop=True)
@@ -121,6 +220,32 @@ def split_feature_columns(X: pd.DataFrame) -> tuple[list[str], list[str]]:
         if column not in numeric_columns and column not in explicit_categorical
     ]
     return numeric_columns, categorical_columns
+
+
+def build_feature_groups(df: pd.DataFrame) -> dict[str, list[str]]:
+    """Build cumulative, prediction-time feature groups from columns that exist."""
+    structural = [
+        column for column in FEATURE_GROUP_CANDIDATES["B1_structural_calendar"] if column in df
+    ]
+    environment = [
+        column for column in FEATURE_GROUP_CANDIDATES["environment"] if column in df
+    ]
+    poi_attributes = [
+        column for column in FEATURE_GROUP_CANDIDATES["poi_attributes"] if column in df
+    ]
+    groups = {
+        "B1_structural_calendar": structural,
+        "B2_plus_environment": structural + environment,
+        "B3_full_pre_observation": structural + environment + poi_attributes,
+    }
+    forbidden = set(LEAKAGE_COLUMNS + [TARGET, "poi_name", "date"])
+    for name, columns in groups.items():
+        overlap = forbidden.intersection(columns)
+        if overlap:
+            raise AssertionError(f"Forbidden fields in {name}: {sorted(overlap)}")
+        if not columns:
+            raise ValueError(f"No usable columns found for {name}")
+    return groups
 
 
 def make_preprocessor(X: pd.DataFrame, scale_numeric: bool) -> ColumnTransformer:
@@ -255,6 +380,30 @@ def candidate_models(X_train: pd.DataFrame) -> list[tuple[str, Pipeline, dict[st
     ]
 
 
+def candidate_pipeline(X_train: pd.DataFrame, selected_name: str) -> Pipeline:
+    for name, pipeline, _ in candidate_models(X_train):
+        if name == selected_name:
+            return pipeline
+    raise KeyError(f"Unknown candidate model: {selected_name}")
+
+
+def grouped_error_table(frame: pd.DataFrame, group_column: str) -> pd.DataFrame:
+    rows = []
+    for value, group in frame.groupby(group_column, observed=True, sort=True):
+        metrics = regression_metrics(group["actual"], group["predicted"].to_numpy())
+        rows.append(
+            {
+                group_column: value,
+                "n": int(len(group)),
+                "mean_actual": float(group["actual"].mean()),
+                "mean_prediction": float(group["predicted"].mean()),
+                "mean_residual": float(group["residual"].mean()),
+                **metrics,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def plot_eda(df: pd.DataFrame) -> None:
     target_log = np.log1p(df[TARGET])
     fig, axes = plt.subplots(1, 3, figsize=(16, 4))
@@ -302,9 +451,9 @@ def main() -> None:
     df = load_dataset()
     plot_eda(df)
 
-    excluded = ["date", TARGET, "poi_name"]
-    feature_columns = [column for column in df.columns if column not in excluded]
-    X = df[feature_columns].copy()
+    feature_groups = build_feature_groups(df)
+    full_feature_columns = feature_groups["B3_full_pre_observation"]
+    X = df[full_feature_columns].copy()
     y = df[TARGET].copy()
 
     train_mask = df["year"] <= TRAIN_END_YEAR
@@ -360,32 +509,79 @@ def main() -> None:
         TABLE_DIR / "rf_parameter_sweep_validation.csv", index=False
     )
 
-    selected_name = str(validation_results.iloc[0]["Model"])
-    print(f"\nSelected from 2023 validation: {selected_name}")
+    learned_results = validation_results[
+        ~validation_results["Model"].isin(
+            ["Train mean baseline", "POI-month-weekday seasonal baseline"]
+        )
+    ]
+    selected_model_name = str(learned_results.iloc[0]["Model"])
+    print(f"\nSelected model family from 2023 validation: {selected_model_name}")
+
+    ablation_rows = [
+        {
+            "Feature_Group": "B0_seasonal_baseline",
+            "Model": "POI-month-weekday seasonal baseline",
+            "Features": "poi_id × month × day_of_week historical target means",
+            **regression_metrics(y_validation, seasonal_prediction),
+        }
+    ]
+    for group_name, group_columns in feature_groups.items():
+        group_train = X_train[group_columns]
+        group_validation = X_validation[group_columns]
+        pipeline = candidate_pipeline(group_train, selected_model_name)
+        pipeline.fit(group_train, y_train_log)
+        prediction = np.clip(np.expm1(pipeline.predict(group_validation)), 0, None)
+        ablation_rows.append(
+            {
+                "Feature_Group": group_name,
+                "Model": selected_model_name,
+                "Features": " | ".join(group_columns),
+                **regression_metrics(y_validation, prediction),
+            }
+        )
+    ablation_results = (
+        pd.DataFrame(ablation_rows).sort_values("MSE").reset_index(drop=True)
+    )
+    ablation_results.to_csv(TABLE_DIR / "feature_ablation_validation.csv", index=False)
+    print("\nFeature ablation results (2023 validation only):")
+    print(ablation_results.to_string(index=False))
+
+    selected_feature_group = str(ablation_results.iloc[0]["Feature_Group"])
+    final_model_name = (
+        "POI-month-weekday seasonal baseline"
+        if selected_feature_group == "B0_seasonal_baseline"
+        else selected_model_name
+    )
+    print(
+        "\nSelected configuration from 2023 validation: "
+        f"{selected_model_name} with {selected_feature_group}"
+    )
 
     train_validation_mask = train_mask | validation_mask
     X_train_validation = X.loc[train_validation_mask]
     y_train_validation = y.loc[train_validation_mask]
 
-    if selected_name == "Train mean baseline":
-        final_model: object = float(y_train_validation.mean())
-        final_prediction = np.full(len(y_test), final_model)
-    elif selected_name == "POI-month-weekday seasonal baseline":
+    if selected_feature_group == "B0_seasonal_baseline":
         final_model = SeasonalMeanBaseline().fit(X_train_validation, y_train_validation)
         final_prediction = final_model.predict(X_test)
     else:
-        selected_index = next(
-            index
-            for index, (name, _, _) in enumerate(candidate_models(X_train_validation))
-            if name == selected_name
+        selected_columns = feature_groups[selected_feature_group]
+        selected_pipeline = candidate_pipeline(
+            X_train_validation[selected_columns], selected_model_name
         )
-        _, selected_pipeline, _ = candidate_models(X_train_validation)[selected_index]
-        selected_pipeline.fit(X_train_validation, np.log1p(y_train_validation))
+        selected_pipeline.fit(
+            X_train_validation[selected_columns], np.log1p(y_train_validation)
+        )
         final_model = selected_pipeline
-        final_prediction = np.clip(np.expm1(selected_pipeline.predict(X_test)), 0, None)
+        final_prediction = np.clip(
+            np.expm1(selected_pipeline.predict(X_test[selected_columns])), 0, None
+        )
 
     test_rows = [
-        {"Model": f"Selected: {selected_name}", **regression_metrics(y_test, final_prediction)},
+        {
+            "Model": f"Selected: {final_model_name} [{selected_feature_group}]",
+            **regression_metrics(y_test, final_prediction),
+        },
     ]
     test_train_mean = np.full(len(y_test), float(y_train_validation.mean()))
     test_rows.append(
@@ -424,7 +620,7 @@ def main() -> None:
     axes[0].plot([lower, upper], [lower, upper], "--", linewidth=2)
     axes[0].set_xlabel("Actual visitors")
     axes[0].set_ylabel("Predicted visitors")
-    axes[0].set_title(f"Actual vs predicted ({selected_name})")
+    axes[0].set_title(f"Actual vs predicted ({selected_model_name})")
     axes[1].scatter(final_prediction, residuals, alpha=0.4, edgecolor="white")
     axes[1].axhline(0, linestyle="--", linewidth=2)
     axes[1].set_xlabel("Predicted visitors")
@@ -438,7 +634,9 @@ def main() -> None:
     plt.xlabel("Actual - predicted")
     save_figure("residuals_histogram.png")
 
-    test_metadata = df.loc[test_mask, ["date", "poi_id", "poi_name"]].reset_index(drop=True)
+    test_metadata = df.loc[
+        test_mask, ["date", "month", "poi_id", "poi_name"]
+    ].reset_index(drop=True)
     residual_table = test_metadata.assign(
         actual=y_test.reset_index(drop=True),
         predicted=final_prediction,
@@ -447,6 +645,37 @@ def main() -> None:
     )
     residual_table.nlargest(10, "absolute_residual").to_csv(
         TABLE_DIR / "top_residual_cases.csv", index=False
+    )
+    residual_table.to_csv(TABLE_DIR / "final_predictions.csv", index=False)
+    grouped_error_table(residual_table, "month").to_csv(
+        TABLE_DIR / "error_by_month.csv", index=False
+    )
+    grouped_error_table(residual_table, "poi_id").sort_values(
+        "MAE", ascending=False
+    ).to_csv(TABLE_DIR / "error_by_poi.csv", index=False)
+    residual_table["visitor_volume_range"] = pd.qcut(
+        residual_table["actual"],
+        q=4,
+        labels=["Q1_low", "Q2_mid_low", "Q3_mid_high", "Q4_high"],
+    )
+    grouped_error_table(residual_table, "visitor_volume_range").to_csv(
+        TABLE_DIR / "error_by_visitor_volume.csv", index=False
+    )
+    residual_summary = {
+        "definition": "residual = actual - predicted",
+        "mean": float(residual_table["residual"].mean()),
+        "median": float(residual_table["residual"].median()),
+        "std": float(residual_table["residual"].std()),
+        "quantiles": {
+            str(key): float(value)
+            for key, value in residual_table["residual"].quantile(
+                [0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]
+            ).items()
+        },
+    }
+    (TABLE_DIR / "residual_summary.json").write_text(
+        json.dumps(residual_summary, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
     )
 
     importance_path = TABLE_DIR / "top_feature_importance.csv"
@@ -462,7 +691,7 @@ def main() -> None:
         plt.figure(figsize=(9, 6))
         plt.barh(importance["feature"][::-1], importance["importance"][::-1])
         plt.xlabel("Impurity-based importance")
-        plt.title(f"Top features ({selected_name})")
+        plt.title(f"Top features ({selected_model_name})")
         save_figure("top_feature_importance.png")
     else:
         if importance_path.exists():
@@ -476,7 +705,10 @@ def main() -> None:
         "train_period": f"2020-{TRAIN_END_YEAR}",
         "validation_period": str(VALIDATION_YEAR),
         "test_period": str(TEST_YEAR),
-        "selected_model": selected_name,
+        "selected_model": final_model_name,
+        "selected_learned_model_family": selected_model_name,
+        "selected_feature_group": selected_feature_group,
+        "feature_groups": feature_groups,
         "selection_metric": "validation MSE on original visitor scale",
         "test_evaluated_after_selection": True,
         "excluded_leakage_columns": LEAKAGE_COLUMNS,
