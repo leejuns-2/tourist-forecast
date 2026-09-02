@@ -4,6 +4,9 @@
 
 `seoul_tourism_2020_2024_clean_common.csv`
 
+- Current analysis input supplied as: user-attached file named `seoul_tourism_2020_2024_clean_common.csv`
+- Repository copy check: parsed dimensions, columns, and all 91,350 × 32 cell values match the attached file; byte-level serialization differs
+- Important distinction: this identifies the file used for the present analysis, not its original provider or collection source
 - Period: 2020-01-01 through 2024-12-31
 - Unit: daily record by tourism point of interest (POI)
 - Target: `daily_visitors`
@@ -21,7 +24,9 @@
 
 The training script parses the date, derives year/month/day-of-year fields, and excludes `foreign_visitors`, `foreign_share`, and `crowd_level` because they are not treated as available before the target is observed. Missing values and categorical encoding are fitted inside sklearn pipelines using the training period only.
 
-## Recovered Provenance and Redistribution
+## Current Input, Recovered Clues, and Redistribution
+
+이번 작업에서 직접 사용한 데이터는 사용자가 첨부한 `seoul_tourism_2020_2024_clean_common.csv`입니다. 아래 과거 기록은 최초 원출처를 확정하는 근거가 아니라, 저장소에서 복원한 미검증 단서입니다.
 
 현재 복원된 과거 기록:
 
@@ -31,7 +36,7 @@ The training script parses the date, derives year/month/day-of-year fields, and 
 - 과거 중간 파일: `seoul_poi_weather_tci_merged.csv`
 - 현재 파일: `seoul_tourism_2020_2024_clean_common.csv`
 
-The repository does not currently contain enough documentation to verify the dataset's provenance or redistribution permission. These fields must be completed from the original collection records:
+The user attachment establishes the immediate source of the current analysis input, but the repository does not contain enough documentation to verify the dataset's original provenance or redistribution permission. These fields must be completed from the original collection records:
 
 - Provider: **TODO — not verified**
 - Original URL: **TODO — not verified**
@@ -41,4 +46,4 @@ The repository does not currently contain enough documentation to verify the dat
 - Full preprocessing lineage and some engineered-feature definitions: **TODO — not fully recovered**
 - Whether `daily_visitors` is an official observed visitor count: **TODO — not fully verified**
 
-Until those fields are verified, the included CSV should not be assumed to be redistributable. Before merging or presenting the repository publicly, confirm the original source and terms. If redistribution is not allowed, remove the CSV from Git history in a separate, reviewed change and provide documented download/preparation instructions instead.
+Until those fields are verified, the included CSV should not be assumed to be redistributable. Before publication, external research use, or further redistribution, confirm the original source and terms. If redistribution is not allowed, remove the CSV from Git history in a separate, reviewed change and provide documented download/preparation instructions instead.
