@@ -81,23 +81,20 @@ POI와 달력 정보에 weather, air quality, TCI 등의 environmental feature�
 - Target: `daily_visitors`
 - Feature groups: calendar, POI attributes, weather, air quality, events, accessibility
 
-이 프로젝트의 현재 분석 입력은 사용자가 첨부해 제공한
-`seoul_tourism_2020_2024_clean_common.csv`입니다.
+이 프로젝트에서는 정제된 서울 관광지 일별 방문객 데이터
+`seoul_tourism_2020_2024_clean_common.csv`를 분석 입력으로 사용했습니다.
 
-첨부 파일과 저장소의 동명 CSV는 직렬화 방식에는 차이가 있지만,
-파싱한 **91,350행 × 32열**의 모든 셀 값이 동일함을 확인했습니다.
+데이터는 **91,350행 × 32열**, 50개 POI로 구성되어 있으며,
+현재 분석 파일에서는 결측치·완전 중복·`date × poi_id` 중복이 각각 0건입니다.
 
-이 설명은 이번 작업에서 사용한 파일의 전달 경로를 뜻하며,
-최초 제공기관이나 수집 원출처를 뜻하지 않습니다.
-
-테이블 감사 결과는 [`outputs/tables/data_audit.json`](outputs/tables/data_audit.json)에 저장됩니다.
-
-현재 파일은 50개 POI이며 결측치·완전 중복·`date × poi_id` 중복은 각각 0건입니다.
+테이블 감사 결과는
+[`outputs/tables/data_audit.json`](outputs/tables/data_audit.json)에 저장됩니다.
 
 `daily_visitors`의 평균은 6,227.8, 중앙값은 3,824,
 최댓값은 73,322이고 왜도는 2.39입니다.
 
-이 오른쪽 꼬리와 음수 예측 방지를 고려해 `log1p` 타깃 학습을 사용합니다.
+이 오른쪽 꼬리와 음수 예측 방지를 고려해
+`log1p` 타깃 학습을 사용합니다.
 
 `foreign_visitors`, `foreign_share`, `crowd_level`은
 목표값이 관측되기 전에 알 수 있다고 보기 어려워 모델에서 제외합니다.
@@ -110,15 +107,14 @@ numeric transformer에서는 제외합니다.
 범주형 인코딩과 결측치 처리는 sklearn `Pipeline`과 `ColumnTransformer` 안에서
 학습 기간에만 fit됩니다.
 
-현재 분석 파일의 직접 제공 경로는 사용자 첨부 파일로 확인했습니다.
+현재 저장된 기록만으로는 원 데이터의 정확한 최초 제공기관,
+원본 URL, 전체 preprocessing lineage, 라이선스 및 재배포 조건을
+완전히 복원하지 못했습니다.
 
-다만 최초 데이터 제공기관, 원본 URL, 라이선스, 최초 다운로드 날짜,
-재배포 가능 여부는 확인되지 않았습니다.
+자세한 내용은 [`data/README.md`](data/README.md)에 기록했습니다.
 
-자세한 TODO는 [`data/README.md`](data/README.md)에 있습니다.
-
-재배포 권한을 확인하기 전에는 포함된 CSV를
-공개 배포 가능하다고 가정하면 안 됩니다.
+원 데이터의 이용 조건이 확인되기 전까지는
+해당 데이터의 재배포 가능 여부를 확정하지 않습니다.
 
 ## Evaluation Design
 
