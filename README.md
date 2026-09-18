@@ -1,12 +1,78 @@
 # Seoul Tourism Visitor Forecast
 
+서울 주요 관광지의 일별 방문객 수를 회귀 모델로 예측하고,
+미래 연도에 대한 성능을 시간 순서대로 평가한 머신러닝 과목 프로젝트입니다.
+
+과거 데이터를 이용해 모델을 선택한 뒤 미래 연도를 별도의 holdout으로 평가하여,
+같은 데이터에서 높은 성능을 얻는 것보다 **미래 시점에 얼마나 일반화되는지 확인하는 것**에 초점을 두었습니다.
+
+---
+
+## Project Context
+
+- Course: Machine Learning
+- Type: 3-person team project
+- Role division:
+  - Classification
+  - Regression
+  - Self-supervised Learning
+- My role: **Regression modeling**
+
+---
+
+## My Contribution
+
+팀 프로젝트에서 **회귀 모델링 부분을 담당**했습니다.
+
+주요 작업은 다음과 같습니다.
+
+- 서울 관광지 일별 방문객 수 예측을 위한 회귀 실험
+- 시간 순서에 따른 train / validation / test 분리
+- Linear Regression, Ridge, Decision Tree, Random Forest 비교
+- historical / seasonal baseline과 모델 성능 비교
+- feature group별 ablation experiment
+- MSE, RMSE, MAE, R² 기반 성능 평가
+- 관광지·월·방문량 구간별 prediction error 분석
+- 미래 데이터가 모델 선택 과정에 포함되지 않도록 evaluation protocol 점검
+
+구현과 분석 과정에서는 **generative AI coding tools를 보조적으로 활용**했으며,
+회귀 파트의 실험 실행, 결과 비교 및 분석, 오류 확인과 평가 과정의 반복적인 수정에 집중했습니다.
+
+---
+
+## Key Result
+
+2023 validation에서 여러 회귀 모델을 비교한 결과
+**Ridge (`alpha=1`)**를 최종 모델로 선택했습니다.
+
+선택된 모델을 2020–2023 데이터로 다시 학습한 뒤
+2024 holdout에서 평가한 결과는 다음과 같습니다.
+
+| Model | 2024 R² |
+|---|---:|
+| Selected Ridge (`alpha=1`, B3) | **0.8167** |
+| Seasonal baseline | 0.6392 |
+| Train mean baseline | -0.1623 |
+
+2024 데이터는 모델 종류, hyperparameter, feature group을 선택하는 과정에는 사용하지 않고
+최종 평가에만 사용했습니다.
+
+---
+
 ## Overview
 
-서울 주요 관광지의 일별 방문객 수를 회귀 모델로 예측하고, 미래 연도에 대한 성능을 시간 순서대로 평가하는 프로젝트입니다. 모델은 방문객 수의 `log1p` 값을 학습하고, 원래 방문객 수 단위로 복원해 MSE, MAE, R²를 계산합니다.
+모델은 방문객 수의 `log1p` 값을 학습하고,
+원래 방문객 수 단위로 복원해 MSE, MAE, R²를 계산합니다.
 
-Primary question: 과거 기간에서 학습한 POI·달력·환경 정보를 이용한 회귀 모델이 historical/seasonal baseline보다 미래 기간의 일별 방문객 수를 더 정확하게 예측할 수 있는가?
+**Primary question:**  
+과거 기간에서 학습한 POI·달력·환경 정보를 이용한 회귀 모델이
+historical/seasonal baseline보다 미래 기간의 일별 방문객 수를 더 정확하게 예측할 수 있는가?
 
-Secondary question: POI와 달력 정보에 weather, air quality, TCI 등의 environmental feature를 추가했을 때 미래 예측 오차가 추가로 줄어드는가? 이 프로젝트는 인과추론이 아니며 환경 feature의 효과를 주장하지 않습니다.
+**Secondary question:**  
+POI와 달력 정보에 weather, air quality, TCI 등의 environmental feature를 추가했을 때
+미래 예측 오차가 추가로 줄어드는가?
+
+이 프로젝트는 인과추론이 아니며 환경 feature의 인과효과를 주장하지 않습니다.
 
 ## Data
 
@@ -15,13 +81,44 @@ Secondary question: POI와 달력 정보에 weather, air quality, TCI 등의 env
 - Target: `daily_visitors`
 - Feature groups: calendar, POI attributes, weather, air quality, events, accessibility
 
-이 프로젝트의 현재 분석 입력은 사용자가 첨부해 제공한 `seoul_tourism_2020_2024_clean_common.csv`입니다. 첨부 파일과 저장소의 동명 CSV는 직렬화 방식에는 차이가 있지만, 파싱한 91,350행 × 32열의 모든 셀 값이 동일함을 확인했습니다. 이 설명은 이번 작업에서 사용한 파일의 전달 경로를 뜻하며, 최초 제공기관이나 수집 원출처를 뜻하지 않습니다.
+이 프로젝트의 현재 분석 입력은 사용자가 첨부해 제공한
+`seoul_tourism_2020_2024_clean_common.csv`입니다.
 
-테이블 감사 결과는 [`outputs/tables/data_audit.json`](outputs/tables/data_audit.json)에 저장됩니다. 현재 파일은 50개 POI이며 결측치·완전 중복·`date × poi_id` 중복은 각각 0건입니다. `daily_visitors`의 평균은 6,227.8, 중앙값은 3,824, 최댓값은 73,322이고 왜도는 2.39입니다. 이 오른쪽 꼬리와 음수 예측 방지를 고려해 `log1p` 타깃 학습을 사용합니다.
+첨부 파일과 저장소의 동명 CSV는 직렬화 방식에는 차이가 있지만,
+파싱한 **91,350행 × 32열**의 모든 셀 값이 동일함을 확인했습니다.
 
-`foreign_visitors`, `foreign_share`, `crowd_level`은 목표값이 관측되기 전에 알 수 있다고 보기 어려워 모델에서 제외합니다. 관광지 식별자인 `poi_id`는 연속형 수치가 아니라 명시적인 categorical feature로 고정해 `OneHotEncoder(handle_unknown="ignore")`로 처리하며, numeric transformer에서는 제외합니다. 범주형 인코딩과 결측치 처리는 sklearn `Pipeline`과 `ColumnTransformer` 안에서 학습 기간에만 fit됩니다.
+이 설명은 이번 작업에서 사용한 파일의 전달 경로를 뜻하며,
+최초 제공기관이나 수집 원출처를 뜻하지 않습니다.
 
-현재 분석 파일의 직접 제공 경로는 사용자 첨부 파일로 확인했습니다. 다만 최초 데이터 제공기관, 원본 URL, 라이선스, 최초 다운로드 날짜, 재배포 가능 여부는 확인되지 않았습니다. 자세한 TODO는 [`data/README.md`](data/README.md)에 있습니다. 재배포 권한을 확인하기 전에는 포함된 CSV를 공개 배포 가능하다고 가정하면 안 됩니다.
+테이블 감사 결과는 [`outputs/tables/data_audit.json`](outputs/tables/data_audit.json)에 저장됩니다.
+
+현재 파일은 50개 POI이며 결측치·완전 중복·`date × poi_id` 중복은 각각 0건입니다.
+
+`daily_visitors`의 평균은 6,227.8, 중앙값은 3,824,
+최댓값은 73,322이고 왜도는 2.39입니다.
+
+이 오른쪽 꼬리와 음수 예측 방지를 고려해 `log1p` 타깃 학습을 사용합니다.
+
+`foreign_visitors`, `foreign_share`, `crowd_level`은
+목표값이 관측되기 전에 알 수 있다고 보기 어려워 모델에서 제외합니다.
+
+관광지 식별자인 `poi_id`는 연속형 수치가 아니라
+명시적인 categorical feature로 고정해
+`OneHotEncoder(handle_unknown="ignore")`로 처리하며,
+numeric transformer에서는 제외합니다.
+
+범주형 인코딩과 결측치 처리는 sklearn `Pipeline`과 `ColumnTransformer` 안에서
+학습 기간에만 fit됩니다.
+
+현재 분석 파일의 직접 제공 경로는 사용자 첨부 파일로 확인했습니다.
+
+다만 최초 데이터 제공기관, 원본 URL, 라이선스, 최초 다운로드 날짜,
+재배포 가능 여부는 확인되지 않았습니다.
+
+자세한 TODO는 [`data/README.md`](data/README.md)에 있습니다.
+
+재배포 권한을 확인하기 전에는 포함된 CSV를
+공개 배포 가능하다고 가정하면 안 됩니다.
 
 ## Evaluation Design
 
@@ -32,9 +129,19 @@ Secondary question: POI와 달력 정보에 weather, air quality, TCI 등의 env
 2024       final holdout evaluation
 ```
 
-2024 결과는 모델 종류나 하이퍼파라미터, feature group 선택에 사용하지 않습니다. Linear Regression, Ridge, Decision Tree와 네 가지 Random Forest 설정을 2023 validation MSE로 비교한 뒤 모델 family를 정하고, 같은 validation에서 B1–B3 feature configuration을 정합니다. 선택 후 train+validation 기간으로 다시 학습하고 2024를 한 번 최종 평가합니다.
+2024 결과는 모델 종류나 하이퍼파라미터, feature group 선택에 사용하지 않습니다.
 
-Primary selection metric은 MSE입니다. 큰 방문객 수 오차에 더 큰 비용을 부여해 급증일의 실패를 모델 선택에 반영하기 위해 선택했으며, 해석 편의를 위해 RMSE·MAE·R²도 원래 방문객 수 단위로 함께 저장합니다.
+Linear Regression, Ridge, Decision Tree와 네 가지 Random Forest 설정을
+2023 validation MSE로 비교한 뒤 모델 family를 정하고,
+같은 validation에서 B1–B3 feature configuration을 정합니다.
+
+선택 후 train+validation 기간으로 다시 학습하고
+2024를 한 번 최종 평가합니다.
+
+Primary selection metric은 MSE입니다.
+
+큰 방문객 수 오차에 더 큰 비용을 부여해 급증일의 실패를 모델 선택에 반영하기 위해 선택했으며,
+해석 편의를 위해 RMSE·MAE·R²도 원래 방문객 수 단위로 함께 저장합니다.
 
 ## Models
 
@@ -43,18 +150,24 @@ Primary selection metric은 MSE입니다. 큰 방문객 수 오차에 더 큰 �
 - Decision Tree
 - Random Forest parameter candidates
 
-모든 학습 모델은 `log1p(daily_visitors)`를 예측합니다. 평가 전 `expm1`으로 복원하고 음수 예측을 0으로 제한합니다.
+모든 학습 모델은 `log1p(daily_visitors)`를 예측합니다.
+
+평가 전 `expm1`으로 복원하고 음수 예측을 0으로 제한합니다.
 
 ## Baselines
 
-- Train mean: 과거 학습 기간의 전체 평균을 예측
-- POI-month-weekday seasonal mean: 과거 데이터의 `poi_id × month × day_of_week` 평균을 사용하고, 조합이 없으면 POI-month, POI, 전체 평균 순으로 대체
+- **Train mean:** 과거 학습 기간의 전체 평균을 예측
+- **POI-month-weekday seasonal mean:** 과거 데이터의 `poi_id × month × day_of_week` 평균을 사용하고, 조합이 없으면 POI-month, POI, 전체 평균 순으로 대체
 
-Validation baseline은 2020–2022 타깃만 사용하고, final test baseline은 2020–2023 타깃만 사용합니다. 미래 타깃은 평균 계산에 포함되지 않습니다.
+Validation baseline은 2020–2022 타깃만 사용하고,
+final test baseline은 2020–2023 타깃만 사용합니다.
+
+미래 타깃은 평균 계산에 포함되지 않습니다.
 
 ## Results
 
-2023 validation에서 Ridge (`alpha=1`)가 가장 낮은 MSE를 기록해 최종 모델로 선택되었습니다.
+2023 validation에서 Ridge (`alpha=1`)가 가장 낮은 MSE를 기록해
+최종 모델로 선택되었습니다.
 
 | Validation model | MSE | RMSE | MAE | R² |
 |---|---:|---:|---:|---:|
@@ -66,7 +179,8 @@ Validation baseline은 2020–2022 타깃만 사용하고, final test baseline�
 
 ### Feature ablation on 2023 validation
 
-모델 family를 Ridge (`alpha=1`)로 정한 뒤, 2024를 보지 않고 다음 cumulative feature group을 비교했습니다.
+모델 family를 Ridge (`alpha=1`)로 정한 뒤,
+2024를 보지 않고 다음 cumulative feature group을 비교했습니다.
 
 | Group | Included information | MSE | RMSE | MAE | R² |
 |---|---|---:|---:|---:|---:|
@@ -75,9 +189,17 @@ Validation baseline은 2020–2022 타깃만 사용하고, final test baseline�
 | B2 | B1 + weather/air quality/TCI | 4,080,262.2 | 2,020.0 | 1,204.2 | 0.9288 |
 | B3 | B2 + available POI attributes | 4,079,253.9 | 2,019.7 | 1,204.1 | 0.9289 |
 
-B2는 B1보다 validation MSE가 약 46.3% 낮았습니다. 이는 해당 환경 변수가 이 데이터에서 추가 predictive signal을 제공했다는 뜻이며 관광객 수를 변화시킨 인과효과를 뜻하지 않습니다. B3의 B2 대비 개선은 매우 작습니다.
+B2는 B1보다 validation MSE가 약 46.3% 낮았습니다.
 
-선택된 Ridge를 2020–2023 데이터로 다시 학습한 뒤 얻은 2024 holdout 결과입니다.
+이는 해당 환경 변수가 이 데이터에서 추가 predictive signal을 제공했다는 뜻이며,
+관광객 수를 변화시킨 인과효과를 뜻하지 않습니다.
+
+B3의 B2 대비 개선은 매우 작습니다.
+
+### Final 2024 Holdout
+
+선택된 Ridge를 2020–2023 데이터로 다시 학습한 뒤 얻은
+2024 holdout 결과입니다.
 
 | Final 2024 evaluation | MSE | RMSE | MAE | R² |
 |---|---:|---:|---:|---:|
@@ -85,13 +207,36 @@ B2는 B1보다 validation MSE가 약 46.3% 낮았습니다. 이는 해당 환경
 | Seasonal baseline | 24,887,899.6 | 4,988.8 | 3,358.6 | 0.6392 |
 | Train mean baseline | 80,177,671.9 | 8,954.2 | 5,687.6 | -0.1623 |
 
-이 수치는 수정된 evaluation pipeline을 2026-09-02에 실행해 재생성했습니다. 이전의 Random Forest R² 0.9273 결과는 2024 test set으로 모델을 선택한 평가에서 나온 값이므로 최종 성능으로 유지하지 않습니다.
+이 수치는 수정된 evaluation pipeline을 2026-09-02에 실행해 재생성했습니다.
+
+이전의 Random Forest R² 0.9273 결과는
+2024 test set으로 모델을 선택한 평가에서 나온 값이므로
+최종 성능으로 유지하지 않습니다.
 
 ## Error Analysis
 
-2024에서 가장 큰 절대오차는 2024-05-05 코엑스몰(`POI046`)의 실제 36,884명 대비 예측 약 82,614명인 과대예측이었습니다. POI별 MAE는 `POI046`이 8,167.2로 가장 컸고, 이어 `POI021` 6,269.2, `POI006` 5,898.4였습니다. 월별 MAE는 9월 3,456.5, 5월 3,416.5가 가장 컸습니다. 방문량 사분위가 높아질수록 MAE가 커지고 모든 구간의 평균 residual이 음수여서 전반적인 과대예측 패턴이 보입니다. 데이터만으로 그 원인을 단정하지 않습니다.
+2024에서 가장 큰 절대오차는
+2024-05-05 코엑스몰(`POI046`)의
+실제 36,884명 대비 예측 약 82,614명인 과대예측이었습니다.
 
-세부 파일은 `final_predictions.csv`, `error_by_month.csv`, `error_by_poi.csv`, `error_by_visitor_volume.csv`, `residual_summary.json`입니다.
+POI별 MAE는 `POI046`이 8,167.2로 가장 컸고,
+이어 `POI021` 6,269.2, `POI006` 5,898.4였습니다.
+
+월별 MAE는 9월 3,456.5, 5월 3,416.5가 가장 컸습니다.
+
+방문량 사분위가 높아질수록 MAE가 커지고
+모든 구간의 평균 residual이 음수여서
+전반적인 과대예측 패턴이 보입니다.
+
+데이터만으로 그 원인을 단정하지 않습니다.
+
+세부 파일:
+
+- `final_predictions.csv`
+- `error_by_month.csv`
+- `error_by_poi.csv`
+- `error_by_visitor_volume.csv`
+- `residual_summary.json`
 
 ## Run
 
@@ -114,7 +259,20 @@ python src/train_regression_models.py
 
 ## Data Source
 
-과거 기록에는 관광/POI 출처가 “Seoul Open Data Portal – Tourism POI & visitor statistics”, 날씨 출처가 “Seoul Historical Weather Data”, Kaggle 식별자가 `alfredkondoro/seoul-historical-weather-data-2024`, 중간 파일이 `seoul_poi_weather_tci_merged.csv`로 남아 있습니다. 그러나 정확한 서울 열린데이터광장 dataset 이름·URL, 전체 preprocessing lineage, feature engineering 정의 일부, `daily_visitors`가 공식 관측치인지 여부, 라이선스와 재배포 권한은 복원되지 않았습니다. publication이나 외부 연구 전에 원자료와 이용 조건을 재확인해야 합니다.
+과거 기록에는 관광/POI 출처가
+“Seoul Open Data Portal – Tourism POI & visitor statistics”,
+날씨 출처가 “Seoul Historical Weather Data”,
+Kaggle 식별자가 `alfredkondoro/seoul-historical-weather-data-2024`,
+중간 파일이 `seoul_poi_weather_tci_merged.csv`로 남아 있습니다.
+
+그러나 정확한 서울 열린데이터광장 dataset 이름·URL,
+전체 preprocessing lineage,
+feature engineering 정의 일부,
+`daily_visitors`가 공식 관측치인지 여부,
+라이선스와 재배포 권한은 복원되지 않았습니다.
+
+publication이나 외부 연구 전에
+원자료와 이용 조건을 재확인해야 합니다.
 
 ## Limitations
 
