@@ -1,16 +1,24 @@
 # Dataset Notes
 
-## Included File
+## Dataset Used in This Project
+
+이 프로젝트에서는 다음 정제 데이터셋을 분석 입력으로 사용했습니다.
 
 `seoul_tourism_2020_2024_clean_common.csv`
 
-- Current analysis input supplied as: user-attached file named `seoul_tourism_2020_2024_clean_common.csv`
-- Repository copy check: parsed dimensions, columns, and all 91,350 × 32 cell values match the attached file; byte-level serialization differs
-- Important distinction: this identifies the file used for the present analysis, not its original provider or collection source
+현재 확인된 데이터 특성:
+
 - Period: 2020-01-01 through 2024-12-31
 - Unit: daily record by tourism point of interest (POI)
+- Rows: 91,350
+- Columns: 32
+- POIs: 50
 - Target: `daily_visitors`
-- Size in the current repository: approximately 14 MB
+
+현재 분석 파일에서는 결측치, 완전 중복,
+`date × poi_id` 중복이 각각 0건입니다.
+
+---
 
 ## Field Groups
 
@@ -22,28 +30,58 @@
 | Calendar and events | `is_holiday`, `special_event`, season encoding |
 | Target and visitor-derived fields | `daily_visitors`, `foreign_visitors`, `foreign_share`, `crowd_level` |
 
-The training script parses the date, derives year/month/day-of-year fields, and excludes `foreign_visitors`, `foreign_share`, and `crowd_level` because they are not treated as available before the target is observed. Missing values and categorical encoding are fitted inside sklearn pipelines using the training period only.
+The training pipeline parses the date and derives additional temporal features.
 
-## Current Input, Recovered Clues, and Redistribution
+`foreign_visitors`, `foreign_share`, and `crowd_level` are excluded from the
+prediction features because they are treated as unavailable or target-derived
+at the time `daily_visitors` would be predicted.
 
-이번 작업에서 직접 사용한 데이터는 사용자가 첨부한 `seoul_tourism_2020_2024_clean_common.csv`입니다. 아래 과거 기록은 최초 원출처를 확정하는 근거가 아니라, 저장소에서 복원한 미검증 단서입니다.
+Missing-value processing and categorical encoding are fitted inside
+scikit-learn pipelines using the training period only.
 
-현재 복원된 과거 기록:
+---
 
-- Tourism / POI: `Seoul Open Data Portal – Tourism POI & visitor statistics` (정확한 dataset 이름과 URL은 미복원)
-- Weather: `Seoul Historical Weather Data`
-- 당시 기록된 Kaggle identifier: `alfredkondoro/seoul-historical-weather-data-2024`
-- 과거 중간 파일: `seoul_poi_weather_tci_merged.csv`
-- 현재 파일: `seoul_tourism_2020_2024_clean_common.csv`
+## Data Provenance
 
-The user attachment establishes the immediate source of the current analysis input, but the repository does not contain enough documentation to verify the dataset's original provenance or redistribution permission. These fields must be completed from the original collection records:
+현재 저장소에 남아 있는 과거 기록을 통해
+다음과 같은 데이터 출처 관련 단서를 확인했습니다.
 
-- Provider: **TODO — not verified**
-- Original URL: **TODO — not verified**
-- License or terms of use: **TODO — not verified**
-- Download date: **TODO — not verified**
-- Redistribution rights for the included CSV: **TODO — not verified**
-- Full preprocessing lineage and some engineered-feature definitions: **TODO — not fully recovered**
-- Whether `daily_visitors` is an official observed visitor count: **TODO — not fully verified**
+- Tourism / POI:
+  `Seoul Open Data Portal – Tourism POI & visitor statistics`
+- Weather:
+  `Seoul Historical Weather Data`
+- Recorded Kaggle identifier:
+  `alfredkondoro/seoul-historical-weather-data-2024`
+- Historical intermediate file:
+  `seoul_poi_weather_tci_merged.csv`
+- Current analysis file:
+  `seoul_tourism_2020_2024_clean_common.csv`
 
-Until those fields are verified, the included CSV should not be assumed to be redistributable. Before publication, external research use, or further redistribution, confirm the original source and terms. If redistribution is not allowed, remove the CSV from Git history in a separate, reviewed change and provide documented download/preparation instructions instead.
+다만 위 기록만으로는 원 데이터의 정확한 provenance를
+완전히 검증할 수 없습니다.
+
+현재 확인되지 않은 항목:
+
+- Original provider: **not fully verified**
+- Original dataset URL: **not fully verified**
+- License / terms of use: **not verified**
+- Original download date: **not verified**
+- Redistribution rights: **not verified**
+- Full preprocessing lineage: **not fully recovered**
+- Definitions of some engineered features: **not fully recovered**
+- Whether `daily_visitors` represents an official observed visitor count:
+  **not fully verified**
+
+---
+
+## Redistribution Note
+
+원 데이터의 라이선스와 재배포 조건이 완전히 확인되지 않았기 때문에,
+이 데이터셋을 공개적으로 재배포할 수 있다고 가정하지 않습니다.
+
+외부 연구, publication 또는 추가 배포 전에
+원 데이터의 제공기관과 이용 조건을 다시 확인해야 합니다.
+
+재배포가 허용되지 않는 것으로 확인될 경우,
+공개 저장소에서는 원 데이터 파일을 제외하고
+데이터를 얻고 준비하는 방법만 문서화하는 방식으로 변경해야 합니다.
